@@ -10,10 +10,8 @@ from alerts import generate_alerts, get_alert_summary
 from forecast import build_forecast_from_summary
 from recommendations import generate_recommendations, generate_executive_summary
 
-# ── PAGE CONFIG ─────────────────────────────────────────────────────────────
 st.set_page_config(page_title="FinSight CFO Dashboard", page_icon="📊", layout="wide")
 
-# ── DARK THEME CSS ───────────────────────────────────────────────────────────
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700;800&family=DM+Mono:wght@400;600&display=swap');
@@ -91,7 +89,7 @@ div[data-testid="stToolbar"] { display: none; }
 </style>
 """, unsafe_allow_html=True)
 
-# ── HELPERS ──────────────────────────────────────────────────────────────────
+
 def fmt_money(v):
     if v is None: return "—"
     s = "-" if v < 0 else ""
@@ -138,8 +136,7 @@ def process_data(summary, line_items):
     exec_sum    = generate_executive_summary(kpis, alerts, recs, forecasts)
     return variances, var_sum, kpis, kpi_cards, root_causes, alerts, alert_sum, forecasts, recs, exec_sum
 
-# ── SIDEBAR ──────────────────────────────────────────────────────────────────
-with st.sidebar:
+
     st.markdown("""
     <div style='text-align:center; padding:20px 0 10px'>
         <div style='background:linear-gradient(135deg,#1E5CC8,#06B6D4);width:48px;height:48px;
@@ -161,7 +158,6 @@ with st.sidebar:
     for step in ["📊 Map P&L","📉 Variances","🎯 KPIs","🔍 Root Cause","🚨 Alerts","🔮 Forecast","💡 Recommendations"]:
         st.markdown(f"<div style='color:#8BA3C7;font-size:12px;padding:3px 0'>→ {step}</div>", unsafe_allow_html=True)
 
-# ── LOAD DATA ────────────────────────────────────────────────────────────────
 # ── LOAD DATA ──────────────────────────────────────
 data_loaded = False
 summary = line_items = monthly_data = company_name = period = None
@@ -176,46 +172,40 @@ if use_demo or "demo_loaded" in st.session_state:
     company_name = "NileTech Solutions"
     period       = "FY 2024"
     data_loaded  = True
-
+    
 elif uploaded:
     
-    if "processed" not in st.session_state or st.session_state.get("last_file") != uploaded.name:
-        with st.spinner("🔍 Analyzing Excel file..."):
+    elif uploaded:
+    if ("processed" not in st.session_state or
+        st.session_state.get("last_file") != uploaded.name):
+
+        with st.spinner("🔍 Classifying and analyzing file..."):
             import tempfile, os, gc
             with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
                 tmp.write(uploaded.read())
                 tmp_path = tmp.name
-            
-            mapped = map_file(tmp_path)
-            gc.collect()
-            try:
-                os.unlink(tmp_path)
-            except PermissionError:
-                pass
-            
-            pl = mapped.get("pl_data") or {}
-            s  = pl.get("summary", {})
-            li = pl.get("line_items", [])
-            
-            if not s or s.get("total_revenue", 0) == 0:
-                s  = DEMO["summary"]
-                li = DEMO["line_items"]
-                st.warning("⚠️ Could not parse P&L — showing demo data.")
-            
-            # ← احفظ النتيجة في session_state
-            st.session_state["processed"]   = True
-            st.session_state["summary"]     = s
-            st.session_state["line_items"]  = li
-            st.session_state["last_file"]   = uploaded.name
-            st.session_state["company"]     = uploaded.name.replace(".xlsx","").replace(".xls","")
 
-   
-    summary      = st.session_state["summary"]
-    line_items   = st.session_state["line_items"]
-    monthly_data = DEMO["monthly"]
+           
+            from file_classifier import classify_file
+            classifier = classify_file(tmp_path)
+
+            from analyzers import analyze_file
+            analysis = analyze_file(tmp_path, classifier)
+
+            gc.collect()
+            try: os.unlink(tmp_path)
+            except: pass
+
+            st.session_state["processed"]  = True
+            st.session_state["classifier"] = classifier
+            st.session_state["analysis"]   = analysis
+            st.session_state["last_file"]  = uploaded.name
+            st.session_state["company"]    = uploaded.name.replace(".xlsx","").replace(".xls","")
+
+    classifier = st.session_state["classifier"]
+    analysis   = st.session_state["analysis"]
     company_name = st.session_state["company"]
-    period       = "YTD"
-    data_loaded  = True
+    data_loaded = True
 elif uploaded:
     with st.spinner("🔍 Analyzing Excel file..."):
         import tempfile, os
@@ -244,17 +234,6 @@ elif uploaded:
         period       = "YTD"
         data_loaded  = True
 
-# ── DASHBOARD ─────────────────────────────────────────────────────────────────
-if not data_loaded:
-    st.markdown("""
-    <div style='display:flex;flex-direction:column;align-items:center;justify-content:center;
-                min-height:70vh;text-align:center;'>
-        <div style='font-size:64px;margin-bottom:20px'>📊</div>
-        <div style='color:#F0F6FF;font-size:28px;font-weight:800;margin-bottom:10px'>FinSight CFO Dashboard</div>
-        <div style='color:#8BA3C7;font-size:15px;margin-bottom:30px'>Upload your Excel P&L or try demo data to get started</div>
-    </div>
-    """, unsafe_allow_html=True)
-    st.stop()
 
 # Process
 variances, var_sum, kpis, kpi_cards, root_causes, alerts, alert_sum, forecasts, recs, exec_sum = process_data(summary, line_items)
