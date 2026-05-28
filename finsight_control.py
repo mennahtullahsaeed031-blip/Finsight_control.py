@@ -713,3 +713,249 @@ elif file_type == "UNKNOWN":
             for s in suggestions:
                 st.write(f"- **{s['type']}** (score: {s['score']})")
     st.info("📋 Supported: P&L · Balance Sheet · Fixed Assets · Payroll · Cash Flow")
+# ══════════════════════════════════════════
+# TAB 6 — BUDGET BUILDER
+# ══════════════════════════════════════════
+with tab6:
+    from budget_builder import (
+        build_master_budget, run_scenarios,
+        explain_budget, DEFAULT_ASSUMPTIONS
+    )
+
+    st.markdown("""
+    <div style='background:linear-gradient(135deg,#0A1628,#0F2040);
+                border:1px solid #8B5CF640;border-radius:12px;padding:20px;
+                margin-bottom:20px'>
+        <div style='color:#8B5CF6;font-size:13px;font-weight:700;
+                    text-transform:uppercase;letter-spacing:0.08em;
+                    margin-bottom:8px'>🏗️ FP&A Budget Builder</div>
+        <div style='color:#8BA3C7;font-size:13px;line-height:1.7'>
+            Enter your assumptions below and FinSight will automatically
+            build a complete Master Budget — Revenue, Production, Materials,
+            Labor, Overhead, SG&A, CapEx, Income Statement, and Cash Flow.
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── Assumptions Form ──────────────────────────────────
+    with st.expander("⚙️ Budget Assumptions", expanded=True):
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.markdown("**Revenue**")
+            base_rev  = st.number_input(
+                "Base Revenue ($)", value=1_000_000, step=50_000)
+            rev_growth = st.slider(
+                "Revenue Growth %", 0, 50, 10) / 100
+            price_unit = st.number_input(
+                "Price per Unit ($)", value=100, step=10)
+
+        with col2:
+            st.markdown("**Costs**")
+            cogs_pct   = st.slider("COGS % of Revenue", 20, 70, 38) / 100
+            inflation  = st.slider("Inflation Rate %", 0, 20, 7) / 100
+            mat_cost   = st.number_input(
+                "Material Cost per Unit ($)", value=30, step=5)
+            labor_hrs  = st.number_input(
+                "Labor Hours per Unit", value=2, step=1)
+            labor_rate = st.number_input(
+                "Labor Rate per Hour ($)", value=25, step=5)
+
+        with col3:
+            st.markdown("**Headcount & Finance**")
+            headcount  = st.number_input(
+                "Headcount", value=50, step=5)
+            avg_salary = st.number_input(
+                "Avg Monthly Salary ($)", value=15_000, step=1_000)
+            loan_bal   = st.number_input(
+                "Loan Balance ($)", value=2_000_000, step=100_000)
+            int_rate   = st.slider(
+                "Interest Rate %", 0, 30, 12) / 100
+            tax_rate   = st.slider(
+                "Tax Rate %", 0, 40, 22) / 100
+            capex      = st.number_input(
+                "Annual CapEx ($)", value=500_000, step=50_000)
+
+    if st.button("🚀 Build Master Budget", use_container_width=True):
+        with st.spinner("Building complete budget..."):
+            assumptions = {
+                **DEFAULT_ASSUMPTIONS,
+                "base_revenue":        base_rev,
+                "revenue_growth":      rev_growth,
+                "price_per_unit":      price_unit,
+                "cogs_pct":            cogs_pct,
+                "inflation_rate":      inflation,
+                "material_per_unit":   mat_cost,
+                "labor_hours_per_unit":labor_hrs,
+                "labor_rate_per_hour": labor_rate,
+                "base_headcount":      headcount,
+                "avg_salary_monthly":  avg_salary,
+                "loan_balance":        loan_bal,
+                "interest_rate":       int_rate,
+                "tax_rate":            tax_rate,
+                "capex_annual":        capex,
+            }
+
+            master   = build_master_budget(assumptions)
+            scenarios = run_scenarios(assumptions)
+            insights  = explain_budget(master)
+            is_data   = master["income_statement"]
+            cf_data   = master["cash_flow"]
+
+            st.session_state["master_budget"] = master
+            st.session_state["scenarios"]     = scenarios
+            st.session_state["bb_insights"]   = insights
+
+    # ── Show Results ──────────────────────────────────────
+    if "master_budget" in st.session_state:
+        master   = st.session_state["master_budget"]
+        scenarios = st.session_state["scenarios"]
+        insights  = st.session_state["bb_insights"]
+        is_data   = master["income_statement"]
+        cf_data   = master["cash_flow"]
+
+        # KPI Summary
+        st.markdown(
+            "<div class='section-title'>Budgeted KPIs</div>",
+            unsafe_allow_html=True)
+        k1,k2,k3,k4,k5,k6 = st.columns(6)
+        for col, label, val, color in [
+            (k1,"Annual Revenue",
+             fmt_money(is_data["annual_revenue"]),"#06B6D4"),
+            (k2,"Gross Profit",
+             fmt_money(is_data["annual_gp"]),"#10B981"),
+            (k3,"Net Income",
+             fmt_money(is_data["annual_net"]),
+             "#10B981" if is_data["annual_net"]>0 else "#EF4444"),
+            (k4,"Gross Margin",
+             f"{is_data['avg_gm']:.1f}%","#10B981"),
+            (k5,"Net Margin",
+             f"{is_data['avg_nm']:.1f}%",
+             "#10B981" if is_data["avg_nm"]>10 else "#F59E0B"),
+            (k6,"Closing Cash",
+             fmt_money(cf_data["closing"]),
+             "#10B981" if cf_data["closing"]>0 else "#EF4444"),
+        ]:
+            with col:
+                st.markdown(f"""
+                <div class='fin-card' style='text-align:center;padding:12px'>
+                    <div style='color:#8BA3C7;font-size:10px;font-weight:700;
+                                text-transform:uppercase'>{label}</div>
+                    <div style='color:{color};font-size:18px;font-weight:800;
+                                font-family:DM Mono;margin-top:6px'>{val}</div>
+                </div>""", unsafe_allow_html=True)
+
+        # AI Insights
+        st.markdown(
+            "<div class='section-title' style='margin-top:20px'>"
+            "AI Budget Insights</div>",
+            unsafe_allow_html=True)
+        for ins in insights:
+            st.markdown(f"""
+            <div style='background:#111F38;border:1px solid #1E3A5F;
+                        border-left:3px solid #8B5CF6;
+                        border-radius:8px;padding:12px 16px;margin-bottom:8px;
+                        color:#8BA3C7;font-size:13px;line-height:1.6'>
+                {ins}
+            </div>""", unsafe_allow_html=True)
+
+        # Revenue Chart
+        st.markdown(
+            "<div class='section-title' style='margin-top:20px'>"
+            "Monthly Revenue Budget</div>",
+            unsafe_allow_html=True)
+        rev_data = master["revenue"]["monthly"]
+        fig_rev  = go.Figure()
+        fig_rev.add_trace(go.Bar(
+            x=[m["month"] for m in rev_data],
+            y=[m["revenue"] for m in rev_data],
+            marker_color="#06B6D4", opacity=0.85, name="Revenue"))
+        fig_rev.update_layout(
+            plot_bgcolor="#111F38", paper_bgcolor="#111F38",
+            font=dict(color="#8BA3C7"),
+            xaxis=dict(gridcolor="#1E3A5F"),
+            yaxis=dict(gridcolor="#1E3A5F", tickformat="$,.0f"),
+            margin=dict(l=0,r=0,t=10,b=0), height=220)
+        st.plotly_chart(fig_rev, use_container_width=True)
+
+        # Income Statement Table
+        st.markdown(
+            "<div class='section-title'>Budgeted Income Statement</div>",
+            unsafe_allow_html=True)
+        is_rows = []
+        for m in is_data["monthly"]:
+            is_rows.append({
+                "Month":        m["month"],
+                "Revenue":      fmt_money(m["revenue"]),
+                "COGS":         fmt_money(m["cogs"]),
+                "Gross Profit": fmt_money(m["gross_profit"]),
+                "GM%":          f"{m['gross_margin']:.1f}%",
+                "SG&A":         fmt_money(m["sga"]),
+                "EBIT":         fmt_money(m["ebit"]),
+                "Net Income":   fmt_money(m["net_income"]),
+                "NM%":          f"{m['net_margin']:.1f}%",
+            })
+        st.dataframe(
+            pd.DataFrame(is_rows),
+            use_container_width=True,
+            hide_index=True)
+
+        # Scenarios
+        st.markdown(
+            "<div class='section-title' style='margin-top:20px'>"
+            "What-If Scenarios</div>",
+            unsafe_allow_html=True)
+        sc_cols = st.columns(4)
+        sc_colors = {
+            "Base Case":    "#3B82F6",
+            "Optimistic":   "#10B981",
+            "Pessimistic":  "#EF4444",
+            "High Inflation":"#F59E0B",
+        }
+        for col, (name, vals) in zip(sc_cols, scenarios.items()):
+            color = sc_colors.get(name, "#8BA3C7")
+            with col:
+                st.markdown(f"""
+                <div class='fin-card'
+                     style='border-top:3px solid {color};text-align:center'>
+                    <div style='color:{color};font-size:12px;font-weight:800;
+                                margin-bottom:10px'>{name}</div>
+                    <div style='color:#06B6D4;font-size:13px;margin-bottom:4px'>
+                        Rev: {fmt_money(vals['revenue'])}</div>
+                    <div style='color:#10B981;font-size:13px;margin-bottom:4px'>
+                        Net: {fmt_money(vals['net_income'])}</div>
+                    <div style='color:#F59E0B;font-size:12px'>
+                        GM: {vals['gross_margin']:.1f}% |
+                        NM: {vals['net_margin']:.1f}%</div>
+                </div>""", unsafe_allow_html=True)
+
+        # Cash Flow Chart
+        st.markdown(
+            "<div class='section-title' style='margin-top:20px'>"
+            "Cash Flow Projection</div>",
+            unsafe_allow_html=True)
+        cf_monthly = cf_data["monthly"]
+        fig_cf     = go.Figure()
+        fig_cf.add_trace(go.Scatter(
+            x=[m["month"] for m in cf_monthly],
+            y=[m["closing_cash"] for m in cf_monthly],
+            name="Closing Cash",
+            line=dict(color="#10B981", width=2.5),
+            fill="tozeroy",
+            fillcolor="rgba(16,185,129,0.08)"))
+        fig_cf.add_trace(go.Bar(
+            x=[m["month"] for m in cf_monthly],
+            y=[m["net_cash"] for m in cf_monthly],
+            name="Net Cash Flow",
+            marker_color=[
+                "#10B981" if m["net_cash"] >= 0 else "#EF4444"
+                for m in cf_monthly
+            ],
+            opacity=0.7))
+        fig_cf.update_layout(
+            plot_bgcolor="#111F38", paper_bgcolor="#111F38",
+            font=dict(color="#8BA3C7"),
+            xaxis=dict(gridcolor="#1E3A5F"),
+            yaxis=dict(gridcolor="#1E3A5F", tickformat="$,.0f"),
+            legend=dict(bgcolor="#111F38"),
+            margin=dict(l=0,r=0,t=10,b=0), height=250)
+        st.plotly_chart(fig_cf, use_container_width=True)
