@@ -195,27 +195,25 @@ elif uploaded:
             st.session_state["analysis"]    = an
             st.session_state["company"]     = uploaded.name.replace(".xlsx","").replace(".xls","")
 
-    # اسحب من session
     classifier   = st.session_state["classifier"]
     analysis     = st.session_state["analysis"]
     company_name = st.session_state["company"]
     file_type    = analysis.get("type", "UNKNOWN")
     period       = "YTD"
 
-    # لو P&L — اسحب summary و line_items
     if file_type == "P&L" and not analysis.get("error"):
         summary      = analysis.get("summary", DEMO["summary"])
         line_items   = analysis.get("line_items", DEMO["line_items"])
         monthly_data = DEMO["monthly"]
     else:
-        # نوع تاني — P&L summary مش متاح
+        
         summary      = None
         line_items   = None
         monthly_data = None
 
     data_loaded = True
 
-# ── WELCOME SCREEN (لو مفيش data) ────────────────────────────────────────────
+
 if not data_loaded:
     st.markdown("""
     <div style='display:flex;flex-direction:column;align-items:center;
@@ -308,12 +306,13 @@ if file_type == "P&L" and summary and line_items:
                 {forecasts["insights"]["projected_revenue_growth"]:+.1f}% rev growth</div>
         </div>""", unsafe_allow_html=True)
 
-    # Tabs
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "📊 Overview","📈 P&L Analysis",
-        "🚨 Alerts & Root Cause","🔮 Forecast","💡 Action Plan"
-    ])
-
+   # ── TABS ──
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    "📊 Overview","📈 P&L Analysis",
+    "🚨 Alerts & Root Cause","🔮 Forecast",
+    "💡 Action Plan","🏗️ Budget Builder"
+])
+   
     # ── TAB 1: OVERVIEW ───────────────────────────────────────────────────────
     with tab1:
         st.markdown("<div class='section-title'>Key Performance Indicators</div>",
@@ -713,6 +712,13 @@ elif file_type == "UNKNOWN":
             for s in suggestions:
                 st.write(f"- **{s['type']}** (score: {s['score']})")
     st.info("📋 Supported: P&L · Balance Sheet · Fixed Assets · Payroll · Cash Flow")
+
+with tab6:
+    from budget_builder import (
+        build_master_budget, run_scenarios,
+        explain_budget, DEFAULT_ASSUMPTIONS
+    )
+    
 # ══════════════════════════════════════════
 # TAB 6 — BUDGET BUILDER
 # ══════════════════════════════════════════
