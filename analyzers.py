@@ -5,7 +5,7 @@ import numpy as np
 
 def analyze_pl(df_dict: dict, summary: dict, line_items: list) -> dict:
     """نفس الـ logic القديم بس بيرجع بشكل موحد"""
-    from modules.kpi import calculate_kpis, format_kpi_card
+    from kpi import calculate_kpis, format_kpi_card
     kpis      = calculate_kpis(summary, line_items)
     kpi_cards = format_kpi_card(kpis)
     return {
