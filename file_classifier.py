@@ -67,9 +67,24 @@ FILE_SIGNATURES = {
         "color": "#3B82F6",
     },
     "BUDGET": {
-        "keywords": ["budget","annual budget","department budget","allocated",
-                     "allocation","variance","actual vs budget",
-                     "ميزانية","مخصص","انحراف"],
+    "keywords": [
+        "budget","annual budget","allocated","allocation",
+        "variance","actual vs budget","planned",
+        "ميزانية","مخصص","انحراف","خطة",
+        "raw materials","direct labor","direct materials",
+        "overhead","production cost","manufacturing",
+        "sg&a","selling","general","administrative",
+        "cogs","cost of goods","cost of sales",
+        "wages","salaries","employee","staff",
+        "q1","q2","q3","q4","quarter","annual",
+        "total","subtotal","amount","value",
+        "مواد خام","عمالة","تكاليف","إنتاج","ربع",
+    ],
+    "min_score": 1,
+    "label": "Budget Plan",
+    "icon": "📋",
+    "color": "#F97316",
+},
         "min_score": 2,
         "kpis": ["budget_utilization","variance","burn_rate"],
         "label": "Budget Plan",
@@ -87,25 +102,25 @@ def classify_file(file_path: str) -> dict:
         xl = pd.ExcelFile(file_path)
         all_text = ""
 
-        # اجمع كل النصوص من كل الشيتات
+        
         for sheet in xl.sheet_names:
             df = pd.read_excel(file_path, sheet_name=sheet, header=None)
             all_text += " " + sheet.lower()
             for col in df.columns:
                 all_text += " " + " ".join(df[col].astype(str).str.lower().tolist())
 
-        # احسب score لكل نوع
+      
         scores = {}
         for file_type, sig in FILE_SIGNATURES.items():
             score = sum(1 for kw in sig["keywords"] if kw in all_text)
             scores[file_type] = score
 
-        # النوع اللي جاب أعلى score
+        
         best_type = max(scores, key=scores.get)
         best_score = scores[best_type]
         sig = FILE_SIGNATURES[best_type]
 
-        # لو الـ score منخفض جداً → Unknown
+        
         if best_score < sig["min_score"]:
             best_type = "UNKNOWN"
 
