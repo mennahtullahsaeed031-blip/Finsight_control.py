@@ -1,160 +1,232 @@
-
 import pandas as pd
 import re
 
 FILE_SIGNATURES = {
     "P&L": {
-        "keywords": ["revenue","sales","cogs","cost of goods","gross profit",
-                     "operating expense","opex","ebitda","net income","net profit",
-                     "إيراد","مبيعات","تكلفة","أرباح","صافي"],
-        "min_score": 2,
-        "kpis": ["gross_margin","net_margin","ebitda_margin","opex_ratio","revenue_growth"],
+        "keywords": [
+            "revenue","sales","income","cogs","cost of goods","gross profit",
+            "operating","net income","net profit","ebitda","turnover",
+            "income statement","profit","loss","p&l","gross margin",
+            "إيراد","مبيعات","دخل","تكلفة","أرباح","صافي","إجمالي الربح",
+        ],
         "label": "Income Statement (P&L)",
         "icon": "📊",
         "color": "#06B6D4",
     },
     "BALANCE_SHEET": {
-        "keywords": ["assets","liabilities","equity","current assets","fixed assets",
-                     "accounts receivable","accounts payable","retained earnings",
-                     "total assets","total liabilities","shareholders",
-                     "أصول","خصوم","حقوق ملكية","ذمم"],
-        "min_score": 2,
-        "kpis": ["current_ratio","debt_to_equity","asset_turnover","working_capital"],
+        "keywords": [
+            "assets","liabilities","equity","receivable","payable",
+            "retained","shareholders","balance sheet","current assets",
+            "fixed assets","total assets","total liabilities",
+            "أصول","خصوم","حقوق","ذمم","ميزانية عمومية","رأس المال",
+        ],
         "label": "Balance Sheet",
         "icon": "🏦",
         "color": "#8B5CF6",
     },
     "CASH_FLOW": {
-        "keywords": ["cash flow","operating activities","investing activities",
-                     "financing activities","net cash","capex","capital expenditure",
-                     "cash from","free cash flow","fcf",
-                     "تدفق نقدي","أنشطة تشغيلية","أنشطة استثمارية"],
-        "min_score": 2,
-        "kpis": ["operating_cash_flow","free_cash_flow","capex_ratio","cash_conversion"],
+        "keywords": [
+            "cash flow","cash from","operating activities","investing activities",
+            "financing activities","net cash","free cash","fcf",
+            "تدفق","نقدي","تشغيلية","استثمارية","تمويلية",
+        ],
         "label": "Cash Flow Statement",
         "icon": "💸",
         "color": "#10B981",
     },
     "FIXED_ASSETS": {
-        "keywords": ["fixed assets","asset","equipment","machinery","vehicles",
-                     "furniture","buildings","land","depreciation","accumulated",
-                     "capex","asset category","asset type","useful life",
-                     "أصول ثابتة","معدات","آلات","مبانى","استهلاك"],
-        "min_score": 2,
-        "kpis": ["capex_utilization","budget_variance","depreciation_impact","top_categories"],
+        "keywords": [
+            "fixed assets","equipment","machinery","vehicles","furniture",
+            "depreciation","accumulated depreciation","useful life",
+            "capital expenditure","capex","building","land","construction",
+            "أصول ثابتة","معدات","آلات","مركبات","استهلاك","مبانى",
+        ],
         "label": "Fixed Assets / CapEx Budget",
         "icon": "🏗️",
         "color": "#F59E0B",
     },
     "PAYROLL": {
-        "keywords": ["salary","salaries","payroll","employee","staff","wages",
-                     "headcount","department","bonus","allowance","deduction",
-                     "رواتب","موظفين","مرتبات","بدلات","خصومات"],
-        "min_score": 2,
-        "kpis": ["total_payroll","avg_salary","headcount","payroll_to_revenue"],
+        "keywords": [
+            "salary","salaries","payroll","employee","staff","wages",
+            "headcount","bonus","allowance","deduction","basic pay",
+            "net pay","gross pay","hr budget",
+            "رواتب","موظفين","مرتبات","بدلات","خصومات","أجور",
+        ],
         "label": "Payroll / HR Budget",
         "icon": "👥",
         "color": "#EC4899",
     },
-    "REVENUE_FORECAST": {
-        "keywords": ["forecast","projection","projected","target","plan",
-                     "revenue forecast","sales forecast","pipeline",
-                     "توقع","مستهدف","خطة مبيعات"],
-        "min_score": 2,
-        "kpis": ["forecast_accuracy","target_achievement","growth_rate"],
-        "label": "Revenue Forecast",
-        "icon": "🔮",
-        "color": "#3B82F6",
+    "WORKING_CAPITAL": {
+        "keywords": [
+            "working capital","current ratio","quick ratio",
+            "receivables days","payables days","inventory days",
+            "cash conversion cycle","liquidity",
+            "رأس المال العامل","أصول متداولة","خصوم متداولة",
+        ],
+        "label": "Working Capital Budget",
+        "icon": "💵",
+        "color": "#14B8A6",
+    },
+    "LOAN": {
+        "keywords": [
+            "loan","repayment","installment","principal","interest expense",
+            "amortization","remaining balance","debt schedule",
+            "قرض","سداد","قسط","أصل","فائدة","رصيد متبقي",
+        ],
+        "label": "Loan Repayment Schedule",
+        "icon": "🏦",
+        "color": "#F43F5E",
     },
     "BUDGET": {
-    "keywords": [
-        "budget","annual budget","allocated","allocation",
-        "variance","actual vs budget","planned",
-        "ميزانية","مخصص","انحراف","خطة",
-        "raw materials","direct labor","direct materials",
-        "overhead","production cost","manufacturing",
-        "sg&a","selling","general","administrative",
-        "cogs","cost of goods","cost of sales",
-        "wages","salaries","employee","staff",
-        "q1","q2","q3","q4","quarter","annual",
-        "total","subtotal","amount","value",
-        "مواد خام","عمالة","تكاليف","إنتاج","ربع",
-    ],
-    "min_score": 1,
-    "label": "Budget Plan",
-    "icon": "📋",
-    "color": "#F97316",
-},
-        "min_score": 2,
-        "kpis": ["budget_utilization","variance","burn_rate"],
+        "keywords": [
+            # General budget keywords
+            "budget","annual budget","allocated","allocation","planned",
+            "variance","actual vs budget","target","forecast",
+            # Production & Manufacturing
+            "raw materials","direct labor","direct materials","overhead",
+            "production cost","manufacturing cost","production budget",
+            "units to produce","units produced","output",
+            # Cost types
+            "cogs budget","cost of goods budget","cost of sales budget",
+            "sg&a","selling expenses","general expenses","administrative",
+            "marketing expenses","distribution cost",
+            # Financial terms
+            "q1","q2","q3","q4","quarter","annual","monthly","yearly",
+            "total budget","department budget","master budget",
+            "amount","value","subtotal",
+            # Arabic
+            "ميزانية","مخصص","انحراف","خطة","مستهدف",
+            "مواد خام","عمالة مباشرة","تكاليف إنتاج",
+            "مصاريف بيع","مصاريف إدارية","ربع سنوي",
+        ],
         "label": "Budget Plan",
         "icon": "📋",
         "color": "#F97316",
     },
 }
 
-def classify_file(file_path: str) -> dict:
-    """
-    يقرأ الملف ويحدد نوعه قبل أي تحليل
-    Returns: {type, label, icon, color, confidence, kpis, all_text}
-    """
+def _extract_all_text(file_path: str) -> str:
+    """يستخرج كل النصوص من الملف"""
+    all_text = ""
     try:
         xl = pd.ExcelFile(file_path)
-        all_text = ""
 
-        
+        # أسماء الشيتات مهمة جداً
         for sheet in xl.sheet_names:
-            df = pd.read_excel(file_path, sheet_name=sheet, header=None)
             all_text += " " + sheet.lower()
-            for col in df.columns:
-                all_text += " " + " ".join(df[col].astype(str).str.lower().tolist())
 
-      
-        scores = {}
-        for file_type, sig in FILE_SIGNATURES.items():
-            score = sum(1 for kw in sig["keywords"] if kw in all_text)
-            scores[file_type] = score
+        # محتوى كل شيت
+        for sheet in xl.sheet_names:
+            try:
+                df = pd.read_excel(
+                    file_path,
+                    sheet_name=sheet,
+                    header=None,
+                    nrows=100
+                )
+                for col in df.columns:
+                    col_text = df[col].astype(str).str.lower().str.strip()
+                    all_text += " " + " ".join(col_text.tolist())
+            except Exception:
+                continue
 
-        
-        best_type = max(scores, key=scores.get)
-        best_score = scores[best_type]
-        sig = FILE_SIGNATURES[best_type]
+    except Exception:
+        return ""
 
-        
-        if best_score < sig["min_score"]:
-            best_type = "UNKNOWN"
-       
-       if best_score == 0:
-    file_name = file_path.lower()
-         if any(x in file_name for x in ["budget","plan","forecast"]):
-        best_type, best_score = "BUDGET", 1
-        elif any(x in file_name for x in ["cogs","cost","material","labor","overhead"]):
-        best_type, best_score = "BUDGET", 1
-         elif any(x in file_name for x in ["p&l","income","profit","revenue","sales"]):
-        best_type, best_score = "P&L", 1
-         elif any(x in file_name for x in ["balance","sheet","asset","liabilit"]):
-        best_type, best_score = "BALANCE_SHEET", 1
-        elif any(x in file_name for x in ["payroll","salary","hr","employee"]):
-        best_type, best_score = "PAYROLL", 1
-        elif any(x in file_name for x in ["cash","flow"]):
-        best_type, best_score = "CASH_FLOW", 1
-    # لو لسه مش عارف — BUDGET هو الـ default الآمن
-       else:
-        best_type, best_score = "BUDGET", 1
-        confidence = min(best_score / 6 * 100, 100)
+    # نظف النص
+    all_text = re.sub(r'[^\w\s\u0600-\u06FF&./%-]', ' ', all_text)
+    return all_text
 
+def _classify_by_filename(file_path: str) -> str:
+    """يصنف الملف من اسمه لو مش لاقي keywords كافية"""
+    name = file_path.lower()
+
+    if any(x in name for x in ["p&l","income statement","profit loss",
+                                 "profit & loss","income_statement"]):
+        return "P&L"
+
+    if any(x in name for x in ["balance sheet","balance_sheet"]):
+        return "BALANCE_SHEET"
+
+    if any(x in name for x in ["cash flow","cashflow","cash_flow"]):
+        return "CASH_FLOW"
+
+    if any(x in name for x in ["fixed asset","fixed_asset","capex",
+                                 "capital expenditure"]):
+        return "FIXED_ASSETS"
+
+    if any(x in name for x in ["payroll","salary","salaries","hr budget",
+                                 "human resource"]):
+        return "PAYROLL"
+
+    if any(x in name for x in ["working capital","liquidity"]):
+        return "WORKING_CAPITAL"
+
+    if any(x in name for x in ["loan","repayment","debt schedule"]):
+        return "LOAN"
+
+    # أي ملف فيه كلمة budget → BUDGET
+    if any(x in name for x in ["budget","plan","forecast","projection",
+                                 "cogs","materials","labor","overhead",
+                                 "sg&a","selling","production","manufacturing",
+                                 "direct","indirect","variance"]):
+        return "BUDGET"
+
+    return "UNKNOWN"
+
+def classify_file(file_path: str) -> dict:
+    """
+    يصنف الملف المالي ويرجع نوعه مع الـ confidence
+    """
+    # أولاً: حاول تقرأ الملف
+    try:
+        xl = pd.ExcelFile(file_path)
+        sheet_names = xl.sheet_names
+    except Exception as e:
         return {
-            "type":       best_type,
-            "label":      FILE_SIGNATURES.get(best_type, {}).get("label", "Unknown File"),
-            "icon":       FILE_SIGNATURES.get(best_type, {}).get("icon", "📄"),
-            "color":      FILE_SIGNATURES.get(best_type, {}).get("color", "#8BA3C7"),
-            "confidence": round(confidence, 0),
-            "kpis":       FILE_SIGNATURES.get(best_type, {}).get("kpis", []),
-            "scores":     scores,
-            "sheet_names": xl.sheet_names,
+            "type":       "ERROR",
+            "label":      "Error reading file",
+            "icon":       "❌",
+            "color":      "#EF4444",
+            "confidence": 0,
+            "sheet_names": [],
+            "scores":     {},
+            "error":      str(e),
         }
 
-    except Exception as e:
-        return {"type": "ERROR", "label": "Error reading file",
-                "icon": "❌", "color": "#EF4444", "confidence": 0,
-                "kpis": [], "error": str(e)}
+    # استخرج كل النصوص
+    all_text = _extract_all_text(file_path)
+
+    # احسب score لكل نوع
+    scores = {}
+    for file_type, sig in FILE_SIGNATURES.items():
+        score = sum(1 for kw in sig["keywords"] if kw in all_text)
+        scores[file_type] = score
+
+    best_type  = max(scores, key=scores.get)
+    best_score = scores[best_type]
+
+    # لو الـ score منخفض جداً (أقل من 2) — استخدم اسم الملف
+    if best_score < 2:
+        filename_type = _classify_by_filename(file_path)
+        if filename_type != "UNKNOWN":
+            best_type  = filename_type
+            best_score = max(best_score, 1)
+
+    # لو لسه UNKNOWN أو score = 0 — BUDGET هو الـ safe default
+    if best_score == 0 or best_type == "UNKNOWN":
+        best_type  = "BUDGET"
+        best_score = 1
+
+    sig        = FILE_SIGNATURES.get(best_type, FILE_SIGNATURES["BUDGET"])
+    confidence = min(best_score / 8 * 100, 100)
+
+    return {
+        "type":        best_type,
+        "label":       sig["label"],
+        "icon":        sig["icon"],
+        "color":       sig["color"],
+        "confidence":  round(confidence, 0),
+        "sheet_names": sheet_names,
+        "scores":      scores,
+    }
