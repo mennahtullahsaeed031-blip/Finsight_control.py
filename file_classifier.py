@@ -123,7 +123,24 @@ def classify_file(file_path: str) -> dict:
         
         if best_score < sig["min_score"]:
             best_type = "UNKNOWN"
-
+       
+       if best_score == 0:
+    file_name = file_path.lower()
+         if any(x in file_name for x in ["budget","plan","forecast"]):
+        best_type, best_score = "BUDGET", 1
+        elif any(x in file_name for x in ["cogs","cost","material","labor","overhead"]):
+        best_type, best_score = "BUDGET", 1
+         elif any(x in file_name for x in ["p&l","income","profit","revenue","sales"]):
+        best_type, best_score = "P&L", 1
+         elif any(x in file_name for x in ["balance","sheet","asset","liabilit"]):
+        best_type, best_score = "BALANCE_SHEET", 1
+        elif any(x in file_name for x in ["payroll","salary","hr","employee"]):
+        best_type, best_score = "PAYROLL", 1
+        elif any(x in file_name for x in ["cash","flow"]):
+        best_type, best_score = "CASH_FLOW", 1
+    # لو لسه مش عارف — BUDGET هو الـ default الآمن
+       else:
+        best_type, best_score = "BUDGET", 1
         confidence = min(best_score / 6 * 100, 100)
 
         return {
