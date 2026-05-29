@@ -111,11 +111,10 @@ def _extract_all_text(file_path: str) -> str:
     try:
         xl = pd.ExcelFile(file_path)
 
-        # أسماء الشيتات مهمة جداً
         for sheet in xl.sheet_names:
             all_text += " " + sheet.lower()
 
-        # محتوى كل شيت
+        
         for sheet in xl.sheet_names:
             try:
                 df = pd.read_excel(
@@ -133,7 +132,7 @@ def _extract_all_text(file_path: str) -> str:
     except Exception:
         return ""
 
-    # نظف النص
+    
     all_text = re.sub(r'[^\w\s\u0600-\u06FF&./%-]', ' ', all_text)
     return all_text
 
@@ -202,6 +201,40 @@ def classify_file(file_path: str) -> dict:
     for file_type, sig in FILE_SIGNATURES.items():
         score = sum(1 for kw in sig["keywords"] if kw in all_text)
         scores[file_type] = score
+        # احسب scores
+    scores = {}
+    for file_type, sig in FILE_SIGNATURES.items():
+        score = sum(1 for kw in sig["keywords"] if kw in all_text)
+        scores[file_type] = score
+
+    # ── P&L CHECK الأول ──────────────────────────────
+    # لو الملف فيه الكلمات دي → P&L مش Budget
+    must_be_pl = [
+        "revenue", "gross profit", "net income",
+        "cost of goods", "operating expenses",
+    ]
+    pl_hits = sum(1 for kw in must_be_pl if kw in all_text)
+
+    if pl_hits >= 3:
+       
+        best_type  = "P&L"
+        best_score = pl_hits
+    else:
+        
+        best_type  = max(scores, key=scores.get)
+        best_score = scores[best_type]
+
+    
+    if best_score < 2:
+        filename_type = _classify_by_filename(file_path)
+        if filename_type != "UNKNOWN":
+            best_type  = filename_type
+            best_score = 1
+
+  
+    if best_score == 0:
+        best_type  = "BUDGET"
+        best_score = 1
 
     best_type  = max(scores, key=scores.get)
     best_score = scores[best_type]
