@@ -183,9 +183,9 @@ elif uploaded:
     analysis     = st.session_state["analysis"]
     company_name = st.session_state["company"]
     file_type    = analysis.get("type","UNKNOWN")
-    period       = "YTD"
-
-     if file_type in ("P&L","BUDGET","SGA","PRODUCTION") and not analysis.get("error"):
+    period       = "YTD" 
+    
+       if file_type in ("P&L","BUDGET","SGA","PRODUCTION") and not analysis.get("error"):
         summary      = analysis.get("summary", DEMO["summary"])
         line_items   = analysis.get("line_items", DEMO["line_items"])
         monthly_data = DEMO["monthly"]
