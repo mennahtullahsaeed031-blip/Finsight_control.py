@@ -365,7 +365,6 @@ def analyze_unknown(df_dict, classifier_result):
         }]
     }
 
-
 def analyze_file(file_path, classifier_result):
     file_type = classifier_result.get("type", "UNKNOWN")
 
@@ -373,29 +372,37 @@ def analyze_file(file_path, classifier_result):
     try:
         xl = pd.ExcelFile(file_path)
         for sheet in xl.sheet_names:
-            df_dict[sheet] = pd.read_excel(file_path, sheet_name=sheet, header=None)
+            df_dict[sheet] = pd.read_excel(
+                file_path, sheet_name=sheet, header=None)
     except Exception as e:
-        return {"type": "ERROR", "error": str(e), "kpi_cards": [], "alerts": []}
+        return {"type":"ERROR","error":str(e),"kpi_cards":[],"alerts":[]}
 
-    if file_type == "P&L":
-        from mapping import map_file
-        mapped  = map_file(file_path)
-        pl      = mapped.get("pl_data") or {}
-        summary = pl.get("summary", {})
-        items   = pl.get("line_items", [])
-        if summary.get("total_revenue", 0) > 0:
-            return analyze_pl(df_dict, summary, items)
-        return {"type": "P&L", "error": "Could not parse P&L",
-                "kpi_cards": [], "alerts": []}
+    
+    from mapping import map_file
+    mapped  = map_file(file_path)
+    pl      = mapped.get("pl_data") or {}
+    summary = pl.get("summary", {})
+    items   = pl.get("line_items", [])
 
-    elif file_type == "FIXED_ASSETS":
+    if summary.get("total_revenue", 0) > 0:
+        
+        result = analyze_pl(df_dict, summary, items)
+        result["original_type"] = file_type
+        return result
+
+    if file_type == "FIXED_ASSETS":
         return analyze_fixed_assets(df_dict)
-
     elif file_type == "BALANCE_SHEET":
         return analyze_balance_sheet(df_dict)
-
     elif file_type == "PAYROLL":
         return analyze_payroll(df_dict)
-
+    elif file_type == "LOAN":
+        return analyze_loan(df_dict)
+    elif file_type == "WORKING_CAPITAL":
+        return analyze_working_capital(df_dict)
+    elif file_type == "CASH_FLOW":
+        return analyze_cash_flow(df_dict)
+    elif file_type in ("BUDGET","SGA","PRODUCTION"):
+        return analyze_budget(df_dict, classifier_result)
     else:
         return analyze_unknown(df_dict, classifier_result)
