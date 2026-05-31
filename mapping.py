@@ -49,7 +49,16 @@ def classify_account(name: str) -> str:
 
 def is_skip_row(name: str) -> bool:
     n = str(name).lower().strip()
-    return any(k in n for k in SKIP_KEYWORDS)
+    
+    skip = ["total","subtotal","grand total","مجموع","إجمالي",
+            "fiscal year","prepared by","reviewed","version",
+            "annual budget","budget plan",
+            "revenue","cost of goods sold","operating expenses",
+            "non-operating"]
+    
+    if name.strip() == name.strip().upper() and len(name.strip()) > 3:
+        return True
+    return any(k == n for k in skip)
 
 def _to_num(val):
     if val is None: return None
@@ -96,16 +105,17 @@ def _find_header_row(df: pd.DataFrame) -> int:
     return best_row
 
 def _find_account_col(data: pd.DataFrame) -> int:
-    """بيلاقي عمود أسماء البنود"""
     for ci in range(min(5, len(data.columns))):
         col = data.iloc[:, ci].astype(str)
         text_count = sum(
             1 for v in col
             if len(v.strip()) > 2
+            and v.strip() not in ["nan","None","","-","—"]
             and not v.strip().replace(".","").replace("-","").replace(",","").isnumeric()
-            and v.strip() not in ["nan","None",""]
+            # مش section header
+            and v.strip().upper() != v.strip()
         )
-        if text_count / max(len(col), 1) > 0.3:
+        if text_count / max(len(col), 1) > 0.25:
             return ci
     return 0
 
@@ -140,14 +150,13 @@ def _parse_pl_sheet(df: pd.DataFrame, sheet_name: str) -> dict:
 
     if len(data) < 2:
         return result
-
-    # إيجاد عمود الأسماء
+ 
     acct_col = _find_account_col(data)
 
-    # إيجاد عمود الـ Category (لو موجود)
+   
     cat_col  = _find_category_col(data, acct_col)
 
-    # إيجاد أعمدة الأرقام
+    
     period_cols = []
     for ci, h in enumerate(headers):
         if ci == acct_col or ci == cat_col:
@@ -161,7 +170,7 @@ def _parse_pl_sheet(df: pd.DataFrame, sheet_name: str) -> dict:
 
     result["periods"] = [headers[ci] for ci in period_cols]
 
-    # قراءة البنود
+
     revenues, cogs_items, opex_items, nonop_items = [], [], [], []
 
     for ri in range(len(data)):
