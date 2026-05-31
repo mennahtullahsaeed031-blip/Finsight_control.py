@@ -100,7 +100,7 @@ FILE_SIGNATURES = {
     },
 }
 
-
+# ── كلمات P&L الأساسية اللي لو اتلقت 3 منها → P&L مؤكد ──────────────────
 PL_MUST_KEYWORDS = [
     "revenue", "gross profit", "net income",
     "cost of goods", "operating expenses",
@@ -172,7 +172,7 @@ def classify_file(file_path: str) -> dict:
     """
     يصنف الملف المالي ويرجع نوعه مع الـ confidence
     """
-    
+    # أولاً: حاول تقرأ الملف
     try:
         xl = pd.ExcelFile(file_path)
         sheet_names = xl.sheet_names
@@ -188,10 +188,10 @@ def classify_file(file_path: str) -> dict:
             "error":       str(e),
         }
 
-   
+    # استخرج كل النصوص
     all_text = _extract_all_text(file_path)
 
-    
+    # ── STEP 1: احسب score لكل نوع (مرة واحدة بس) ────────────────────────
     scores = {}
     for file_type, sig in FILE_SIGNATURES.items():
         scores[file_type] = sum(1 for kw in sig["keywords"] if kw in all_text)
@@ -205,17 +205,18 @@ def classify_file(file_path: str) -> dict:
         best_score = max(scores["P&L"], pl_hits)
 
     else:
-       
+        # ── STEP 3: خد الـ type اللي معاه أعلى score ──────────────────────
         best_type  = max(scores, key=scores.get)
         best_score = scores[best_type]
 
+        # ── STEP 4: لو الـ score منخفض → جرب اسم الملف ───────────────────
         if best_score < 2:
             filename_type = _classify_by_filename(file_path)
             if filename_type != "UNKNOWN":
                 best_type  = filename_type
                 best_score = max(best_score, 1)
 
-     
+        
         if best_score == 0 or best_type == "UNKNOWN":
             best_type  = "BUDGET"
             best_score = 1
