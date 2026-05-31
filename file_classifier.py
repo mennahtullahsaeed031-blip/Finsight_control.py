@@ -79,22 +79,17 @@ FILE_SIGNATURES = {
     },
     "BUDGET": {
         "keywords": [
-            # General budget keywords
             "budget","annual budget","allocated","allocation","planned",
             "variance","actual vs budget","target","forecast",
-            # Production & Manufacturing
             "raw materials","direct labor","direct materials","overhead",
             "production cost","manufacturing cost","production budget",
             "units to produce","units produced","output",
-            # Cost types
             "cogs budget","cost of goods budget","cost of sales budget",
             "sg&a","selling expenses","general expenses","administrative",
             "marketing expenses","distribution cost",
-            # Financial terms
             "q1","q2","q3","q4","quarter","annual","monthly","yearly",
             "total budget","department budget","master budget",
             "amount","value","subtotal",
-            # Arabic
             "ميزانية","مخصص","انحراف","خطة","مستهدف",
             "مواد خام","عمالة مباشرة","تكاليف إنتاج",
             "مصاريف بيع","مصاريف إدارية","ربع سنوي",
@@ -105,16 +100,24 @@ FILE_SIGNATURES = {
     },
 }
 
+
+PL_MUST_KEYWORDS = [
+    "revenue", "gross profit", "net income",
+    "cost of goods", "operating expenses",
+    "إيراد", "إجمالي الربح", "صافي الدخل",
+]
+
 def _extract_all_text(file_path: str) -> str:
     """يستخرج كل النصوص من الملف"""
     all_text = ""
     try:
         xl = pd.ExcelFile(file_path)
 
+        # أسماء الشيتات
         for sheet in xl.sheet_names:
             all_text += " " + sheet.lower()
 
-        
+        # محتوى كل شيت (أول 100 صف)
         for sheet in xl.sheet_names:
             try:
                 df = pd.read_excel(
@@ -132,124 +135,90 @@ def _extract_all_text(file_path: str) -> str:
     except Exception:
         return ""
 
-    
     all_text = re.sub(r'[^\w\s\u0600-\u06FF&./%-]', ' ', all_text)
     return all_text
+
 
 def _classify_by_filename(file_path: str) -> str:
     """يصنف الملف من اسمه لو مش لاقي keywords كافية"""
     name = file_path.lower()
 
-    if any(x in name for x in ["p&l","income statement","profit loss",
-                                 "profit & loss","income_statement"]):
+    if any(x in name for x in ["p&l", "income statement", "profit loss",
+                                "profit & loss", "income_statement"]):
         return "P&L"
-
-    if any(x in name for x in ["balance sheet","balance_sheet"]):
+    if any(x in name for x in ["balance sheet", "balance_sheet"]):
         return "BALANCE_SHEET"
-
-    if any(x in name for x in ["cash flow","cashflow","cash_flow"]):
+    if any(x in name for x in ["cash flow", "cashflow", "cash_flow"]):
         return "CASH_FLOW"
-
-    if any(x in name for x in ["fixed asset","fixed_asset","capex",
-                                 "capital expenditure"]):
+    if any(x in name for x in ["fixed asset", "fixed_asset", "capex",
+                                "capital expenditure"]):
         return "FIXED_ASSETS"
-
-    if any(x in name for x in ["payroll","salary","salaries","hr budget",
-                                 "human resource"]):
+    if any(x in name for x in ["payroll", "salary", "salaries", "hr budget",
+                                "human resource"]):
         return "PAYROLL"
-
-    if any(x in name for x in ["working capital","liquidity"]):
+    if any(x in name for x in ["working capital", "liquidity"]):
         return "WORKING_CAPITAL"
-
-    if any(x in name for x in ["loan","repayment","debt schedule"]):
+    if any(x in name for x in ["loan", "repayment", "debt schedule"]):
         return "LOAN"
-
-    # أي ملف فيه كلمة budget → BUDGET
-    if any(x in name for x in ["budget","plan","forecast","projection",
-                                 "cogs","materials","labor","overhead",
-                                 "sg&a","selling","production","manufacturing",
-                                 "direct","indirect","variance"]):
+    if any(x in name for x in ["budget", "plan", "forecast", "projection",
+                                "cogs", "materials", "labor", "overhead",
+                                "sg&a", "selling", "production", "manufacturing",
+                                "direct", "indirect", "variance"]):
         return "BUDGET"
-
     return "UNKNOWN"
+
 
 def classify_file(file_path: str) -> dict:
     """
     يصنف الملف المالي ويرجع نوعه مع الـ confidence
     """
-    # أولاً: حاول تقرأ الملف
+    
     try:
         xl = pd.ExcelFile(file_path)
         sheet_names = xl.sheet_names
     except Exception as e:
         return {
-            "type":       "ERROR",
-            "label":      "Error reading file",
-            "icon":       "❌",
-            "color":      "#EF4444",
-            "confidence": 0,
+            "type":        "ERROR",
+            "label":       "Error reading file",
+            "icon":        "❌",
+            "color":       "#EF4444",
+            "confidence":  0,
             "sheet_names": [],
-            "scores":     {},
-            "error":      str(e),
+            "scores":      {},
+            "error":       str(e),
         }
 
-    # استخرج كل النصوص
+   
     all_text = _extract_all_text(file_path)
 
-    # احسب score لكل نوع
+    
     scores = {}
     for file_type, sig in FILE_SIGNATURES.items():
-        score = sum(1 for kw in sig["keywords"] if kw in all_text)
-        scores[file_type] = score
-        # احسب scores
-    scores = {}
-    for file_type, sig in FILE_SIGNATURES.items():
-        score = sum(1 for kw in sig["keywords"] if kw in all_text)
-        scores[file_type] = score
+        scores[file_type] = sum(1 for kw in sig["keywords"] if kw in all_text)
 
-    # ── P&L CHECK الأول ──────────────────────────────
-    # لو الملف فيه الكلمات دي → P&L مش Budget
-    must_be_pl = [
-        "revenue", "gross profit", "net income",
-        "cost of goods", "operating expenses",
-    ]
-    pl_hits = sum(1 for kw in must_be_pl if kw in all_text)
+    # ── STEP 2: P&L Override ──────────────────────────────────────────────
+    # لو الملف فيه 3+ من الكلمات الأساسية دي → P&L مؤكد بغض النظر عن باقي الـ scores
+    pl_hits = sum(1 for kw in PL_MUST_KEYWORDS if kw in all_text)
 
     if pl_hits >= 3:
-       
         best_type  = "P&L"
-        best_score = pl_hits
+        best_score = max(scores["P&L"], pl_hits)
+
     else:
-        
+       
         best_type  = max(scores, key=scores.get)
         best_score = scores[best_type]
 
-    
-    if best_score < 2:
-        filename_type = _classify_by_filename(file_path)
-        if filename_type != "UNKNOWN":
-            best_type  = filename_type
+        if best_score < 2:
+            filename_type = _classify_by_filename(file_path)
+            if filename_type != "UNKNOWN":
+                best_type  = filename_type
+                best_score = max(best_score, 1)
+
+     
+        if best_score == 0 or best_type == "UNKNOWN":
+            best_type  = "BUDGET"
             best_score = 1
-
-  
-    if best_score == 0:
-        best_type  = "BUDGET"
-        best_score = 1
-
-    best_type  = max(scores, key=scores.get)
-    best_score = scores[best_type]
-
-    # لو الـ score منخفض جداً (أقل من 2) — استخدم اسم الملف
-    if best_score < 2:
-        filename_type = _classify_by_filename(file_path)
-        if filename_type != "UNKNOWN":
-            best_type  = filename_type
-            best_score = max(best_score, 1)
-
-    # لو لسه UNKNOWN أو score = 0 — BUDGET هو الـ safe default
-    if best_score == 0 or best_type == "UNKNOWN":
-        best_type  = "BUDGET"
-        best_score = 1
 
     sig        = FILE_SIGNATURES.get(best_type, FILE_SIGNATURES["BUDGET"])
     confidence = min(best_score / 8 * 100, 100)
