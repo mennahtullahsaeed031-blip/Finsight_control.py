@@ -32,7 +32,7 @@ def _find_text_col(df, exclude=None):
     for ci in range(min(5, len(df.columns))):
         if ci == exclude:
             continue
-        col = df.iloc[:, ci].astype(str)
+        col = df.iloc[:, ci].fillna("").astype(str)
         ratio = sum(
             1 for v in col
             if len(v.strip()) > 2
@@ -109,7 +109,7 @@ def analyze_fixed_assets(df_dict):
             continue
         header_row = 0
         for i in range(min(10, len(df))):
-            row = df.iloc[i].astype(str).str.lower().tolist()
+            row = df.iloc[i].fillna("").astype(str).str.lower().tolist()
             if any(any(kw in v for kw in BUDGET_KW + ACTUAL_KW) for v in row):
                 header_row = i
                 break
@@ -227,7 +227,7 @@ def analyze_balance_sheet(df_dict):
         if text_col is None or num_col is None:
             continue
         for _, row in df.iterrows():
-            label = str(row.iloc[text_col]).lower().strip()
+            label = str(row.iloc[text_col] if text_col is not None else "").lower().strip()
             val   = _to_num(row.iloc[num_col]) or 0
             if any(x in label for x in ["total assets", "أصول إجمالية"]):
                 total_assets = val or total_assets
@@ -303,7 +303,7 @@ def analyze_payroll(df_dict):
             continue
         header_row = 0
         for i in range(min(5, len(df))):
-            row = df.iloc[i].astype(str).str.lower().tolist()
+            row = df.iloc[i].fillna("").astype(str).str.lower().tolist()
             if any(any(kw in v for kw in SALARY_KW + NAME_KW) for v in row):
                 header_row = i
                 break
@@ -381,7 +381,7 @@ def analyze_cash_flow(df_dict):
         if text_col is None or num_col is None:
             continue
         for _, row in df.iterrows():
-            label = str(row.iloc[text_col]).lower().strip()
+            label = str(row.iloc[text_col] if text_col is not None else "").lower().strip()
             val   = _to_num(row.iloc[num_col]) or 0
             if any(x in label for x in OP_KW):
                 operating += val
@@ -446,7 +446,7 @@ def analyze_loan(df_dict):
             continue
         header_row = 0
         for i in range(min(10, len(df))):
-            row = df.iloc[i].astype(str).str.lower().tolist()
+            row = df.iloc[i].fillna("").astype(str).str.lower().tolist()
             if any(any(kw in v for kw in PRIN_KW + INT_KW + PAY_KW) for v in row):
                 header_row = i
                 break
@@ -521,7 +521,7 @@ def analyze_working_capital(df_dict):
         if text_col is None or num_col is None:
             continue
         for _, row in df.iterrows():
-            label = str(row.iloc[text_col]).lower().strip()
+            label = str(row.iloc[text_col] if text_col is not None else "").lower().strip()
             val   = _to_num(row.iloc[num_col]) or 0
             if any(x in label for x in REC_KW):
                 receivables += val
@@ -603,7 +603,7 @@ def analyze_budget(df_dict, classifier_result=None):
         # إيجاد الـ header row
         header_row = 0
         for i in range(min(10, len(df))):
-            row = df.iloc[i].astype(str).str.lower().tolist()
+            row = df.iloc[i].fillna("").astype(str).str.lower().tolist()
             if any(any(kw in v for kw in BUDGET_KW + ACTUAL_KW) for v in row):
                 header_row = i
                 break
@@ -771,7 +771,7 @@ def analyze_file(file_path, classifier_result):
     except Exception as e:
         return {"type": "ERROR", "error": str(e), "kpi_cards": [], "alerts": []}
 
-  
+    # جرب P&L أولاً بغض النظر عن التصنيف
     from mapping import map_file
     mapped  = map_file(file_path)
     pl      = mapped.get("pl_data") or {}
@@ -783,7 +783,7 @@ def analyze_file(file_path, classifier_result):
         result["original_type"] = file_type
         return result
 
-    
+    # حلل حسب النوع
     if file_type == "FIXED_ASSETS":
         return analyze_fixed_assets(df_dict)
     elif file_type == "BALANCE_SHEET":
