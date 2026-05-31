@@ -64,28 +64,34 @@ def _to_num(val):
     except: return None
 
 def _find_header_row(df: pd.DataFrame) -> int:
-    """
-    بيدور على الصف اللي فيه أسماء الشهور أو Column Headers
-    بيبص في أول 15 صف
-    """
     best_row, best_score = 0, 0
     for i in range(min(15, len(df))):
         row_vals = df.iloc[i].astype(str).tolist()
         score = 0
-        # نقطة لكل شهر
+        
         score += sum(1 for v in row_vals
-                     if any(re.search(p, v.lower()) for p in MONTH_PATTERNS))
-        # نقطتين لو فيه "actual" أو "budget"
+                     if any(re.search(p, v.lower())
+                            for p in MONTH_PATTERNS))
+       
         score += sum(2 for v in row_vals
                      if any(x in v.lower() for x in
-                            ["actual","budget","plan","فعلي","مخطط"]))
-        # نقطتين لو فيه "line item" أو "account"
-        score += sum(2 for v in row_vals
+                            ["category","line item","account",
+                             "description","بند","حساب"]))
+        
+        score += sum(1 for v in row_vals
                      if any(x in v.lower() for x in
-                            ["line item","account","description","category",
-                             "بند","حساب"]))
+                            ["actual","budget","plan","فعلي"]))
         if score > best_score:
             best_score, best_row = score, i
+
+    
+    for i in range(best_row, min(best_row+3, len(df)-1)):
+        next_row = df.iloc[i+1]
+        nums = sum(1 for v in next_row
+                   if pd.to_numeric(str(v).replace(",",""), errors='coerce') is not None
+                   and str(v) not in ["nan","None",""])
+        if nums >= 2:
+            return i
 
     return best_row
 
