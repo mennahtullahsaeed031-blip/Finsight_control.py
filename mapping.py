@@ -337,8 +337,17 @@ def _find_pl_sheet(xl, sheet_names: list):
             items  = len(parsed.get("line_items", []))
             # أفضل نتيجة = revenue حقيقي + أكتر line items
             name_bonus = _score_sheet_name(sname)
-            cogs_bonus = 2 if parsed.get("summary", {}).get("total_cogs", 0) > 0 else 1
-            quality = rev * (1 + items * 0.1) * name_bonus * cogs_bonus if items >= 2 else 0
+            cogs  = parsed.get("summary", {}).get("total_cogs", 0)
+            cogs_bonus = 2 if cogs > 0 else 1
+            # شروط P&L حقيقي:
+            # 1. COGS = 0 وname score منخفض → false positive → تجاهل
+            # 2. items < 4 إلا لو COGS موجود وname score عالي (شيت موثوق)
+            if cogs == 0 and name_bonus < 6:
+                quality = 0  # مصاريف مش P&L
+            elif items < 4 and not (cogs > 0 and name_bonus >= 6):
+                quality = 0  # مش كافي items للـ P&L
+            else:
+                quality = rev * (1 + items * 0.1) * name_bonus * cogs_bonus
             if quality > best_score:
                 best_score  = quality
                 best_result = parsed
