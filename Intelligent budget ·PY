@@ -1,0 +1,563 @@
+"""
+Module 2: Intelligent Budget Builder
+FP&A Grade — CMA/CIMA Standard
+
+بيفرق عن Master Budget في إنه:
+1. بيفهم الشركة أولاً (Industry, Size, Country)
+2. بيحسب CAGR من بيانات تاريخية
+3. بيستخدم Economic Assumptions (GDP, Inflation, FX)
+4. بيسأل عن Business Drivers (New Products, CapEx, Hires)
+5. بيعمل Scenario Engine مبني على CAGR + GDP
+6. بيعمل Benchmark Validation لكل صناعة
+7. بعدين بيبني Master Budget تلقائياً
+"""
+
+import math
+from budget_builder import build_master_budget, DEFAULT_ASSUMPTIONS
+
+# ══════════════════════════════════════════════════════════════════════════════
+# INDUSTRY BENCHMARKS (Academic / FP&A Standard)
+# Source: Damodaran, McKinsey, Industry Reports
+# ══════════════════════════════════════════════════════════════════════════════
+INDUSTRY_BENCHMARKS = {
+    "Food & Beverage": {
+        "gross_margin":  (25, 40),   # %
+        "net_margin":    (5,  15),
+        "opex_ratio":    (15, 25),
+        "payroll_pct":   (8,  15),
+        "marketing_pct": (3,  8),
+        "cogs_pct":      (60, 75),
+        "revenue_growth":(5,  15),
+    },
+    "Technology / SaaS": {
+        "gross_margin":  (60, 80),
+        "net_margin":    (10, 30),
+        "opex_ratio":    (30, 50),
+        "payroll_pct":   (20, 35),
+        "marketing_pct": (10, 25),
+        "cogs_pct":      (20, 40),
+        "revenue_growth":(15, 40),
+    },
+    "Retail": {
+        "gross_margin":  (25, 45),
+        "net_margin":    (2,  8),
+        "opex_ratio":    (20, 35),
+        "payroll_pct":   (10, 18),
+        "marketing_pct": (2,  6),
+        "cogs_pct":      (55, 75),
+        "revenue_growth":(3,  12),
+    },
+    "Manufacturing": {
+        "gross_margin":  (20, 40),
+        "net_margin":    (5,  15),
+        "opex_ratio":    (15, 28),
+        "payroll_pct":   (12, 22),
+        "marketing_pct": (2,  6),
+        "cogs_pct":      (60, 80),
+        "revenue_growth":(5,  15),
+    },
+    "Healthcare": {
+        "gross_margin":  (30, 60),
+        "net_margin":    (5,  20),
+        "opex_ratio":    (20, 35),
+        "payroll_pct":   (25, 40),
+        "marketing_pct": (2,  8),
+        "cogs_pct":      (40, 70),
+        "revenue_growth":(8,  20),
+    },
+    "NGO / Non-Profit": {
+        "gross_margin":  (0,  20),
+        "net_margin":    (-5, 5),
+        "opex_ratio":    (60, 90),
+        "payroll_pct":   (40, 65),
+        "marketing_pct": (2,  10),
+        "cogs_pct":      (80, 100),
+        "revenue_growth":(-5, 10),
+    },
+    "Financial Services": {
+        "gross_margin":  (40, 70),
+        "net_margin":    (15, 35),
+        "opex_ratio":    (25, 45),
+        "payroll_pct":   (20, 35),
+        "marketing_pct": (3,  10),
+        "cogs_pct":      (30, 60),
+        "revenue_growth":(5,  20),
+    },
+    "General": {
+        "gross_margin":  (25, 55),
+        "net_margin":    (5,  20),
+        "opex_ratio":    (20, 40),
+        "payroll_pct":   (10, 25),
+        "marketing_pct": (3,  12),
+        "cogs_pct":      (45, 75),
+        "revenue_growth":(5,  20),
+    },
+}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STEP 1: BUSINESS PROFILE
+# ══════════════════════════════════════════════════════════════════════════════
+def create_business_profile(
+    industry:      str   = "General",
+    company_size:  str   = "SME",       # Startup / SME / Enterprise
+    country:       str   = "Egypt",
+    currency:      str   = "USD",
+    base_year:     int   = 2025,
+) -> dict:
+    return {
+        "industry":     industry,
+        "company_size": company_size,
+        "country":      country,
+        "currency":     currency,
+        "base_year":    base_year,
+        "benchmarks":   INDUSTRY_BENCHMARKS.get(industry, INDUSTRY_BENCHMARKS["General"]),
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STEP 2: HISTORICAL DATA ANALYSIS
+# Input: 3 years of actuals (Revenue, COGS, GP, OpEx, Net Income)
+# Output: CAGR for each metric
+# ══════════════════════════════════════════════════════════════════════════════
+def calculate_cagr(start_value: float, end_value: float, years: int) -> float:
+    """
+    CAGR = (End Value / Start Value)^(1/n) - 1
+    Academic formula — CMA/CFA standard
+    """
+    if start_value <= 0 or end_value <= 0 or years <= 0:
+        return 0.0
+    return (end_value / start_value) ** (1 / years) - 1
+
+
+def analyze_historical_data(historical: dict) -> dict:
+    """
+    Input: {
+        "2023": {"revenue": 1M, "cogs": 600K, "gross_profit": 400K,
+                 "opex": 200K, "net_income": 150K},
+        "2024": {...},
+        "2025": {...},
+    }
+    Output: CAGR + Trends + Margins
+    """
+    years = sorted(historical.keys())
+    if len(years) < 2:
+        return {"error": "Need at least 2 years of data", "cagr": {}}
+
+    n       = len(years) - 1
+    first   = historical[years[0]]
+    last    = historical[years[-1]]
+
+    # CAGR for each metric
+    cagr = {
+        "revenue":      calculate_cagr(first.get("revenue",1),      last.get("revenue",1),      n),
+        "gross_profit": calculate_cagr(first.get("gross_profit",1),  last.get("gross_profit",1), n),
+        "net_income":   calculate_cagr(first.get("net_income",0.01), last.get("net_income",0.01),n),
+        "cogs":         calculate_cagr(first.get("cogs",1),          last.get("cogs",1),         n),
+        "opex":         calculate_cagr(first.get("opex",1),          last.get("opex",1),         n),
+    }
+
+    # Margin trends
+    margins = {}
+    for yr in years:
+        d   = historical[yr]
+        rev = d.get("revenue", 1)
+        margins[yr] = {
+            "gross_margin": d.get("gross_profit", 0) / rev * 100 if rev else 0,
+            "net_margin":   d.get("net_income",   0) / rev * 100 if rev else 0,
+            "opex_ratio":   d.get("opex",         0) / rev * 100 if rev else 0,
+        }
+
+    # Trend direction
+    rev_values = [historical[y].get("revenue", 0) for y in years]
+    trend = "Growing" if rev_values[-1] > rev_values[0] else "Declining"
+
+    return {
+        "years":       years,
+        "cagr":        {k: round(v * 100, 2) for k, v in cagr.items()},
+        "cagr_raw":    cagr,
+        "margins":     margins,
+        "trend":       trend,
+        "last_revenue":last.get("revenue", 0),
+        "last_net":    last.get("net_income", 0),
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STEP 3: ECONOMIC ASSUMPTIONS
+# ══════════════════════════════════════════════════════════════════════════════
+def create_economic_assumptions(
+    inflation_rate:  float = 0.15,    # 15% Egypt
+    gdp_growth:      float = 0.04,    # 4%
+    interest_rate:   float = 0.20,    # Central Bank Rate
+    fx_change:       float = 0.0,     # USD/EGP change
+    industry_growth: float = 0.07,    # Industry benchmark
+) -> dict:
+    return {
+        "inflation_rate":  inflation_rate,
+        "gdp_growth":      gdp_growth,
+        "interest_rate":   interest_rate,
+        "fx_change":       fx_change,
+        "industry_growth": industry_growth,
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STEP 4: BUSINESS DRIVERS
+# ══════════════════════════════════════════════════════════════════════════════
+def create_business_drivers(
+    new_products:        bool  = False,
+    new_products_rev_pct:float = 0.0,    # % إضافة على الـ revenue
+    new_branches:        bool  = False,
+    new_branches_rev_pct:float = 0.0,
+    new_hires:           int   = 0,      # عدد موظفين جدد
+    avg_new_hire_salary: float = 15_000,
+    marketing_expansion: bool  = False,
+    marketing_extra_pct: float = 0.0,    # extra % of revenue
+    capex_expansion:     float = 0.0,    # extra CapEx
+) -> dict:
+    total_revenue_uplift = new_products_rev_pct + new_branches_rev_pct
+    extra_payroll        = new_hires * avg_new_hire_salary * 12
+    extra_marketing_pct  = marketing_extra_pct if marketing_expansion else 0.0
+
+    return {
+        "new_products":         new_products,
+        "new_products_rev_pct": new_products_rev_pct,
+        "new_branches":         new_branches,
+        "new_branches_rev_pct": new_branches_rev_pct,
+        "new_hires":            new_hires,
+        "avg_new_hire_salary":  avg_new_hire_salary,
+        "extra_payroll_annual": extra_payroll,
+        "marketing_expansion":  marketing_expansion,
+        "extra_marketing_pct":  extra_marketing_pct,
+        "capex_expansion":      capex_expansion,
+        "total_revenue_uplift": total_revenue_uplift,
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STEP 5: SCENARIO ENGINE
+# Builds 3 scenarios: Base / Best / Worst
+# Validated against CAGR + GDP + Industry Growth
+# ══════════════════════════════════════════════════════════════════════════════
+
+def validate_growth_assumption(
+    proposed_growth: float,
+    historical_cagr: float,
+    gdp_growth:      float,
+    industry_growth: float,
+) -> dict:
+    """
+    Validates if the proposed revenue growth is realistic.
+    Warns if growth >> CAGR or GDP.
+    CMA / FP&A best practice: growth should be anchored to historical data.
+    """
+    warnings    = []
+    is_realistic = True
+
+    # Rule 1: proposed > 2x historical CAGR → warning
+    if historical_cagr > 0 and proposed_growth > historical_cagr * 2:
+        warnings.append(
+            f"⚠️ Proposed growth ({proposed_growth*100:.1f}%) is more than 2x "
+            f"historical CAGR ({historical_cagr*100:.1f}%). "
+            f"Justify with specific business drivers."
+        )
+        is_realistic = False
+
+    # Rule 2: proposed > GDP * 5 → warning
+    if gdp_growth > 0 and proposed_growth > gdp_growth * 5:
+        warnings.append(
+            f"⚠️ Proposed growth ({proposed_growth*100:.1f}%) is >5x GDP growth "
+            f"({gdp_growth*100:.1f}%). Requires strong competitive advantage."
+        )
+
+    # Rule 3: proposed > industry_growth * 3 → warning
+    if industry_growth > 0 and proposed_growth > industry_growth * 3:
+        warnings.append(
+            f"⚠️ Proposed growth ({proposed_growth*100:.1f}%) is >3x industry growth "
+            f"({industry_growth*100:.1f}%). "
+            f"May imply unrealistic market share gain."
+        )
+
+    return {
+        "proposed_growth":  round(proposed_growth * 100, 1),
+        "historical_cagr":  round(historical_cagr * 100, 1),
+        "gdp_growth":       round(gdp_growth * 100, 1),
+        "industry_growth":  round(industry_growth * 100, 1),
+        "is_realistic":     is_realistic,
+        "warnings":         warnings,
+        "verdict":          "Realistic ✅" if is_realistic and not warnings else "Review Needed ⚠️",
+    }
+
+
+def build_scenarios(
+    historical_analysis: dict,
+    economic_assumptions: dict,
+    drivers:             dict,
+) -> dict:
+    """
+    3 Scenarios anchored to CAGR + GDP + Drivers:
+    Base:  CAGR + GDP adjustment + drivers
+    Best:  Base + upside from drivers
+    Worst: Base - downside from risks
+    """
+    hist_rev_cagr = historical_analysis["cagr_raw"].get("revenue", 0.10)
+    gdp           = economic_assumptions["gdp_growth"]
+    industry_g    = economic_assumptions["industry_growth"]
+    inflation     = economic_assumptions["inflation_rate"]
+    rev_uplift    = drivers["total_revenue_uplift"]
+
+    # Base: Historical CAGR adjusted for GDP and industry
+    base_growth = (hist_rev_cagr * 0.6 +    # 60% weight on history
+                   gdp           * 0.2 +    # 20% weight on GDP
+                   industry_g    * 0.2)     # 20% weight on industry
+    base_growth += rev_uplift               # add business drivers
+
+    # Best: Base + 30-50% upside
+    best_growth  = base_growth * 1.35 + rev_uplift * 0.5
+
+    # Worst: Base - 30-50% downside + inflation impact
+    worst_growth = base_growth * 0.60 - (inflation * 0.1)
+    worst_growth = max(worst_growth, -0.10)   # floor at -10%
+
+    scenarios = {
+        "Base": {
+            "revenue_growth":  round(base_growth, 4),
+            "inflation_rate":  inflation,
+            "description":     f"Historical CAGR ({hist_rev_cagr*100:.1f}%) weighted with GDP & industry",
+            "probability":     "50%",
+        },
+        "Best": {
+            "revenue_growth":  round(best_growth, 4),
+            "inflation_rate":  inflation * 0.85,
+            "description":     "Above-CAGR growth — new products/branches succeed, market expands",
+            "probability":     "25%",
+        },
+        "Worst": {
+            "revenue_growth":  round(worst_growth, 4),
+            "inflation_rate":  inflation * 1.20,
+            "description":     "Below-CAGR — cost pressures, weak demand, or macro risks materialize",
+            "probability":     "25%",
+        },
+    }
+
+    # Validate each scenario
+    for name, sc in scenarios.items():
+        sc["validation"] = validate_growth_assumption(
+            sc["revenue_growth"], hist_rev_cagr, gdp, industry_g
+        )
+
+    return scenarios
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STEP 6: BENCHMARK VALIDATION
+# ══════════════════════════════════════════════════════════════════════════════
+def validate_against_benchmarks(
+    proposed_assumptions: dict,
+    business_profile:     dict,
+) -> list:
+    """
+    Checks proposed budget assumptions against industry benchmarks.
+    Returns list of alerts/warnings.
+    """
+    alerts     = []
+    benchmarks = business_profile["benchmarks"]
+    industry   = business_profile["industry"]
+
+    checks = [
+        ("gross_margin",  proposed_assumptions.get("gross_margin_pct", 35),
+         "Gross Margin", "%"),
+        ("net_margin",    proposed_assumptions.get("net_margin_pct", 10),
+         "Net Margin", "%"),
+        ("cogs_pct",      proposed_assumptions.get("cogs_pct", 0.55) * 100,
+         "COGS % of Revenue", "%"),
+        ("payroll_pct",   proposed_assumptions.get("payroll_pct", 15),
+         "Payroll % of Revenue", "%"),
+        ("marketing_pct", proposed_assumptions.get("marketing_pct", 0.08) * 100,
+         "Marketing % of Revenue", "%"),
+        ("revenue_growth",proposed_assumptions.get("revenue_growth", 0.10) * 100,
+         "Revenue Growth", "%"),
+    ]
+
+    for key, value, label, unit in checks:
+        if key not in benchmarks:
+            continue
+        low, high = benchmarks[key]
+        if value < low:
+            alerts.append({
+                "type":      "Below Benchmark",
+                "severity":  "Warning",
+                "metric":    label,
+                "value":     f"{value:.1f}{unit}",
+                "benchmark": f"{low}-{high}{unit} ({industry})",
+                "message":   f"{label} ({value:.1f}%) is below the {industry} benchmark ({low}-{high}%). Review your assumptions.",
+            })
+        elif value > high:
+            alerts.append({
+                "type":      "Above Benchmark",
+                "severity":  "Warning" if value < high * 1.5 else "Alert",
+                "metric":    label,
+                "value":     f"{value:.1f}{unit}",
+                "benchmark": f"{low}-{high}{unit} ({industry})",
+                "message":   f"{label} ({value:.1f}%) exceeds {industry} benchmark ({low}-{high}%). Verify if justified by competitive advantage.",
+            })
+        else:
+            alerts.append({
+                "type":      "Within Benchmark",
+                "severity":  "OK",
+                "metric":    label,
+                "value":     f"{value:.1f}{unit}",
+                "benchmark": f"{low}-{high}{unit} ({industry})",
+                "message":   f"✅ {label} ({value:.1f}%) within {industry} benchmark.",
+            })
+
+    return alerts
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STEP 7: AUTO BUILD — generates full Master Budget from intelligent inputs
+# ══════════════════════════════════════════════════════════════════════════════
+def build_intelligent_budget(
+    business_profile:     dict,
+    historical_analysis:  dict,
+    economic_assumptions: dict,
+    drivers:              dict,
+    scenario_name:        str   = "Base",
+    base_assumptions:     dict  = None,
+) -> dict:
+    """
+    Builds Master Budget automatically from intelligent inputs.
+    Combines: CAGR + GDP + Drivers + Scenarios → Full Budget
+    """
+    scenarios = build_scenarios(historical_analysis, economic_assumptions, drivers)
+    scenario  = scenarios.get(scenario_name, scenarios["Base"])
+
+    # Build assumptions by combining defaults + intelligent inputs
+    last_revenue = historical_analysis.get("last_revenue", 1_000_000)
+
+    smart_assumptions = {
+        **(base_assumptions or DEFAULT_ASSUMPTIONS),
+
+        # Revenue: from historical last year
+        "base_revenue":      last_revenue,
+        "revenue_growth":    scenario["revenue_growth"],
+
+        # Inflation adjustments
+        "inflation_rate":    scenario["inflation_rate"],
+        "salary_growth":     economic_assumptions["inflation_rate"] * 0.7,  # wages track 70% of inflation
+
+        # Interest rate from economic assumptions
+        "interest_rate":     economic_assumptions["interest_rate"],
+
+        # Business drivers impact
+        "avg_salary_monthly": (
+            (base_assumptions or DEFAULT_ASSUMPTIONS).get("avg_salary_monthly", 15_000)
+            + (drivers["extra_payroll_annual"] / max(
+                (base_assumptions or DEFAULT_ASSUMPTIONS).get("base_headcount", 50) + drivers["new_hires"], 1
+            ) / 12)
+        ),
+        "base_headcount": (
+            (base_assumptions or DEFAULT_ASSUMPTIONS).get("base_headcount", 50)
+            + drivers["new_hires"]
+        ),
+        "marketing_pct": (
+            (base_assumptions or DEFAULT_ASSUMPTIONS).get("marketing_pct", 0.08)
+            + drivers["extra_marketing_pct"]
+        ),
+        "capex_annual": (
+            (base_assumptions or DEFAULT_ASSUMPTIONS).get("capex_annual", 500_000)
+            + drivers["capex_expansion"]
+        ),
+    }
+
+    # Build the master budget
+    master = build_master_budget(smart_assumptions)
+
+    # Benchmark validation
+    is_d        = master["income_statement"]
+    annual_rev  = is_d["annual_revenue"]
+    annual_pay  = (smart_assumptions["base_headcount"]
+                   * smart_assumptions["avg_salary_monthly"]
+                   * 12 * (1 + smart_assumptions["salary_growth"]))
+
+    validation_assumptions = {
+        "gross_margin_pct":  is_d["avg_gm"],
+        "net_margin_pct":    is_d["avg_nm"],
+        "cogs_pct":          master["cogs"]["annual"] / annual_rev if annual_rev else 0,
+        "payroll_pct":       annual_pay / annual_rev * 100 if annual_rev else 0,
+        "marketing_pct":     smart_assumptions["marketing_pct"],
+        "revenue_growth":    scenario["revenue_growth"],
+    }
+    benchmark_alerts = validate_against_benchmarks(
+        validation_assumptions, business_profile
+    )
+
+    # Growth validation
+    growth_validation = validate_growth_assumption(
+        scenario["revenue_growth"],
+        historical_analysis["cagr_raw"].get("revenue", 0.10),
+        economic_assumptions["gdp_growth"],
+        economic_assumptions["industry_growth"],
+    )
+
+    return {
+        "master_budget":      master,
+        "scenario_used":      scenario_name,
+        "scenario_details":   scenario,
+        "all_scenarios":      scenarios,
+        "benchmark_alerts":   benchmark_alerts,
+        "growth_validation":  growth_validation,
+        "smart_assumptions":  smart_assumptions,
+        "business_profile":   business_profile,
+        "historical_analysis":historical_analysis,
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# INTELLIGENT INSIGHTS
+# ══════════════════════════════════════════════════════════════════════════════
+def generate_intelligent_insights(result: dict) -> list:
+    insights = []
+    sc        = result["scenario_details"]
+    gv        = result["growth_validation"]
+    ha        = result["historical_analysis"]
+    ba        = result["benchmark_alerts"]
+    is_d      = result["master_budget"]["income_statement"]
+
+    # CAGR vs Proposed
+    insights.append(
+        f"📊 Historical Revenue CAGR: {ha['cagr'].get('revenue', 0):.1f}% | "
+        f"Proposed Growth: {sc['revenue_growth']*100:.1f}% | "
+        f"Verdict: {gv['verdict']}"
+    )
+
+    # Scenario logic
+    insights.append(
+        f"🎯 Scenario '{result['scenario_used']}' ({sc.get('probability','—')}): "
+        f"{sc['description']}"
+    )
+
+    # Benchmark summary
+    ok_count   = sum(1 for a in ba if a["severity"] == "OK")
+    warn_count = sum(1 for a in ba if a["severity"] != "OK")
+    insights.append(
+        f"🏭 Benchmark Check: {ok_count} metrics within range, "
+        f"{warn_count} need review."
+    )
+
+    # Warnings
+    for alert in ba:
+        if alert["severity"] != "OK":
+            insights.append(f"   ⚠️ {alert['message']}")
+
+    # Financial summary
+    insights.append(
+        f"💰 Budgeted P&L: Revenue=${is_d['annual_revenue']/1e6:.2f}M | "
+        f"GM={is_d['avg_gm']:.1f}% | NM={is_d['avg_nm']:.1f}%"
+    )
+
+    for w in gv.get("warnings", []):
+        insights.append(f"   {w}")
+
+    return insights
